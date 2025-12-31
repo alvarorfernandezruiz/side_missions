@@ -1,18 +1,12 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import json
-import os
-import random
+import json, os, random
 from urllib.parse import parse_qs
 from threading import Lock
 
 STATE_FILE = "game_state.json"
-state_lock = Lock()
+LOCK = Lock()
 
-DEFAULT_STATE = {
-    "active": False,
-    "agents": {},
-    "players": {}
-}
+ADMIN_AGENT = "itadmin"
 
 AGENT_NAMES = [
     "bola", "ocho", "tigre", "peine", "gato", "perro", "mesa", "silla", "libro", "calle",
@@ -281,28 +275,33 @@ MISSIONS = [
     "Haz que alguien diga 'puede ser'.",
 ]
 
+DEFAULT_STATE = {
+    "active": False,
+    "agents": {},
+    "players": {}
+}
 
-# ------------------------
-# Estado persistente
-# ------------------------
+
+# -------------------------
+# Persistencia
+# -------------------------
 
 def load_state():
     if not os.path.exists(STATE_FILE):
         save_state(DEFAULT_STATE)
-        return DEFAULT_STATE.copy()
     with open(STATE_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_state(state):
-    with state_lock:
+    with LOCK:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-# ------------------------
-# Helpers
-# ------------------------
+# -------------------------
+# Lógica de juego
+# -------------------------
 
 def generate_agents():
     agents = {}
@@ -317,16 +316,18 @@ def generate_agents():
     return agents
 
 
-def free_agent(state):
-    for name, agent in state["agents"].items():
-        if agent["player"] is None:
-            return name
+def assign_agent(state, player_name):
+    for agent, data in state["agents"].items():
+        if data["player"] is None:
+            data["player"] = player_name
+            state["players"][player_name] = agent
+            return agent
     return None
 
 
-# ------------------------
+# -------------------------
 # HTTP Handler
-# ------------------------
+# -------------------------
 
 class Handler(BaseHTTPRequestHandler):
 
@@ -335,11 +336,15 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
 
         if path == "/":
-            self.page_home(state)
-        elif path == "/admin":
-            self.page_admin(state)
+            self.page_home("")
+        elif path == "/error":
+            self.page_home("Error: agente inválido o no hay partida.")
+        elif path == "/register":
+            self.page_register()
         elif path == "/agent":
             self.page_agent(state)
+        elif path == "/admin":
+            self.page_admin(state)
         else:
             self.send_error(404)
 
@@ -348,7 +353,44 @@ class Handler(BaseHTTPRequestHandler):
         data = parse_qs(self.rfile.read(length).decode())
         state = load_state()
 
-        if self.path == "/start":
+        if self.path == "/login":
+            agent = data.get("agent", [""])[0].strip()
+
+            if agent == ADMIN_AGENT:
+                self.redirect("/admin")
+                return
+
+            if not state["active"] or agent not in state["agents"]:
+                self.redirect("/error")
+                return
+
+            self.redirect(f"/agent?name={agent}")
+
+        elif self.path == "/register":
+            name = data.get("name", [""])[0].strip()
+            if not state["active"] or not name:
+                self.redirect("/error")
+                return
+
+            agent = assign_agent(state, name)
+            save_state(state)
+            self.page_assigned(agent)
+
+        elif self.path == "/toggle":
+            agent = data["agent"][0]
+            idx = int(data["idx"][0])
+
+            mission = state["agents"][agent]["missions"][idx]
+            mission["status"] = (
+                "completed" if mission["status"] == "pending"
+                else "failed" if mission["status"] == "completed"
+                else "pending"
+            )
+            save_state(state)
+            self.send_response(204)
+            self.end_headers()
+
+        elif self.path == "/start":
             state["active"] = True
             state["agents"] = generate_agents()
             state["players"] = {}
@@ -359,103 +401,123 @@ class Handler(BaseHTTPRequestHandler):
             save_state(DEFAULT_STATE.copy())
             self.redirect("/")
 
-        elif self.path == "/register":
-            name = data.get("name", [""])[0]
-            if name and state["active"]:
-                agent = free_agent(state)
-                if agent:
-                    state["players"][name] = agent
-                    state["agents"][agent]["player"] = name
-                    save_state(state)
-                    self.redirect(f"/agent?name={agent}")
-                    return
-            self.redirect("/")
+    # -------------------------
+    # Páginas
+    # -------------------------
 
-        elif self.path == "/mission":
-            agent = data["agent"][0]
-            index = int(data["index"][0])
-            state["agents"][agent]["missions"][index]["status"] = data["status"][0]
-            save_state(state)
-            self.send_response(204)
-            self.end_headers()
-
-    # ------------------------
-    # Pages
-    # ------------------------
-
-    def page_home(self, state):
+    def page_home(self, error):
         self.html(f"""
-        <h1>Side Missions</h1>
-        {"<p>Partida activa</p>" if state["active"] else "<p>No hay partida</p>"}
-        <form method="post" action="/register">
-            <input name="name" placeholder="Tu nombre" required>
+        <h1>🕵️ Side Missions</h1>
+        {f"<p class='error'>{error}</p>" if error else ""}
+        <form method="post" action="/login">
+            <input name="agent" placeholder="Nombre de agente secreto">
             <button>Entrar</button>
         </form>
-        <a href="/admin">Admin</a>
+        <a href="/register">Registrarse</a>
+        """)
+
+    def page_register(self):
+        self.html("""
+        <h1>Registro</h1>
+        <form method="post" action="/register">
+            <input name="name" placeholder="Tu nombre real">
+            <button>OK</button>
+        </form>
+        """)
+
+    def page_assigned(self, agent):
+        self.html(f"""
+        <h1>Tu agente secreto es</h1>
+        <div class="agent">{agent}</div>
+        <a href="/">OK</a>
+        """)
+
+    def page_agent(self, state):
+        agent = parse_qs(self.path.split("?")[1]).get("name", [""])[0]
+        data = state["agents"].get(agent)
+
+        if not data:
+            self.redirect("/")
+            return
+
+        cards = ""
+        for i, m in enumerate(data["missions"]):
+            cards += f"""
+            <div class="card {m['status']}" onclick="toggle({i})">
+                {m['text']}
+            </div>
+            """
+
+        self.html(f"""
+        <h1>Agente {agent}</h1>
+        {cards}
+        <script>
+        function toggle(i) {{
+            fetch("/toggle", {{
+                method: "POST",
+                headers: {{"Content-Type":"application/x-www-form-urlencoded"}},
+                body: "agent={agent}&idx="+i
+            }}).then(()=>location.reload())
+        }}
+        </script>
         """)
 
     def page_admin(self, state):
         body = "<h1>Admin</h1>"
         if not state["active"]:
-            body += """
-            <form method="post" action="/start">
-                <button>Iniciar partida</button>
-            </form>
-            """
+            body += "<form method='post' action='/start'><button>Iniciar partida</button></form>"
         else:
-            body += "<h2>Agentes</h2>"
-            for a, info in state["agents"].items():
-                if info["player"]:
-                    body += f"<p><b>{a}</b> – {info['player']}</p>"
-                    for m in info["missions"]:
-                        body += f"<li>{m['text']} ({m['status']})</li>"
-            body += """
-            <form method="post" action="/end">
-                <button>Terminar partida</button>
-            </form>
-            """
+            for a, d in state["agents"].items():
+                if d["player"]:
+                    body += f"<p><b>{a}</b> — {d['player']}</p>"
+            body += "<form method='post' action='/end'><button>Terminar partida</button></form>"
         self.html(body)
 
-    def page_agent(self, state):
-        params = parse_qs(self.path.split("?")[1])
-        name = params.get("name", [""])[0]
-        agent = state["agents"].get(name)
-
-        if not agent:
-            self.redirect("/")
-            return
-
-        body = f"<h1>Agente {name}</h1>"
-        for i, m in enumerate(agent["missions"]):
-            body += f"""
-            <p>{m['text']} – {m['status']}
-            <button onclick="update({i}, 'completed')">✔</button>
-            <button onclick="update({i}, 'failed')">✖</button></p>
-            """
-
-        body += f"""
-        <script>
-        function update(i, s) {{
-            fetch("/mission", {{
-                method: "POST",
-                headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
-                body: "agent={name}&index="+i+"&status="+s
-            }}).then(()=>location.reload());
-        }}
-        </script>
-        """
-
-        self.html(body)
-
-    # ------------------------
-    # Utils
-    # ------------------------
+    # -------------------------
+    # HTML base
+    # -------------------------
 
     def html(self, body):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(body.encode())
+        self.wfile.write(f"""
+        <html>
+        <head>
+        <style>
+        body {{
+            font-family: system-ui;
+            background:#111;
+            color:white;
+            text-align:center;
+            padding:30px;
+        }}
+        input, button {{
+            padding:12px;
+            border-radius:12px;
+            border:none;
+            margin:8px;
+            font-size:16px;
+        }}
+        button {{ background:#444; color:white; }}
+        a {{ color:#aaa; display:block; margin-top:20px; }}
+        .agent {{ font-size:32px; margin:20px; }}
+        .card {{
+            background:#eee;
+            color:#111;
+            padding:20px;
+            margin:12px auto;
+            border-radius:16px;
+            max-width:400px;
+        }}
+        .completed {{ background:#2ecc71; }}
+        .failed {{ background:#e74c3c; }}
+        .error {{ color:#e74c3c; }}
+        </style>
+        </head>
+        <body>{body}</body>
+        </html>
+        """.encode())
 
     def redirect(self, path):
         self.send_response(302)
@@ -463,9 +525,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-# ------------------------
+# -------------------------
 # Server
-# ------------------------
+# -------------------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
