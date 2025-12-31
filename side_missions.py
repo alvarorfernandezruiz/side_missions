@@ -1,4 +1,3 @@
-
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json, os, random
 from urllib.parse import parse_qs, urlencode
@@ -15,6 +14,7 @@ AGENT_NAMES = [
     "notas", "perfil", "torre", "reloj", "metal", "papel", "cinta", "radio", "farol", "cesto",
     "casco", "guante", "caja", "filtro", "motor", "banco", "campo", "sello", "traje", "plomo",
 ]
+
 MISSIONS = [
     "Consigue que alguien diga la palabra 'vale'.",
     "Haz que alguien diga 'mañana'.",
@@ -273,11 +273,14 @@ MISSIONS = [
     "Consigue que alguien diga 'no me lo creo'.",
     "Haz que alguien diga 'puede ser'.",
 ]
+
 DEFAULT_STATE = {"active": False, "agents": {}, "players": {}}
 
-# -------------------------------
+
+# -------------------------
 # Persistencia
-# -------------------------------
+# -------------------------
+
 def load_state():
     if not os.path.exists(STATE_FILE):
         save_state(DEFAULT_STATE)
@@ -289,9 +292,11 @@ def save_state(state):
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
 
-# -------------------------------
+
+# -------------------------
 # Lógica
-# -------------------------------
+# -------------------------
+
 def generate_agents():
     return {
         name: {
@@ -311,10 +316,13 @@ def assign_agent(state, player):
             return agent
     return None
 
-# -------------------------------
+
+# -------------------------
 # HTTP Handler
-# -------------------------------
+# -------------------------
+
 class Handler(BaseHTTPRequestHandler):
+
     def do_GET(self):
         state = load_state()
         path, _, qs = self.path.partition("?")
@@ -322,15 +330,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/":
             self.page_home(params.get("error", [""])[0])
+
         elif path == "/register":
             if not state["active"]:
                 self.redirect("/?error=No hay partida iniciada")
             else:
                 self.page_register()
+
         elif path == "/agent":
             self.page_agent(state)
+
         elif path == "/admin":
             self.page_admin(state)
+
         else:
             self.send_error(404)
 
@@ -339,27 +351,31 @@ class Handler(BaseHTTPRequestHandler):
         data = parse_qs(self.rfile.read(length).decode())
         state = load_state()
 
+        
         if self.path == "/login":
-            # Normalizar el agente (case-insensitive)
+            # Normalizar el agente
             agent = data.get("agent", [""])[0].strip().casefold()
-
-            # Comparación admin también case-insensitive
+        
+            # Comparación con admin, también case-insensitive
             if agent == ADMIN_AGENT.casefold():
                 self.redirect("/admin")
                 return
-
+        
             # Validación de existencia y partida activa
             if not state["active"] or agent not in state["agents"]:
                 self.redirect("/?error=Agente incorrecto")
                 return
-
+        
+            # Redirigir usando el nombre normalizado (coincide con las claves del estado)
             self.redirect(f"/agent?name={agent}")
+
 
         elif self.path == "/register":
             name = data.get("name", [""])[0].strip()
             if not name:
                 self.redirect("/register")
                 return
+
             agent = assign_agent(state, name)
             save_state(state)
             self.page_assigned(agent)
@@ -388,35 +404,38 @@ class Handler(BaseHTTPRequestHandler):
             save_state(DEFAULT_STATE.copy())
             self.redirect("/")
 
-    # -------------------------------
+    # -------------------------
     # Páginas
-    # -------------------------------
+    # -------------------------
+
     def page_home(self, error):
         self.html(f"""
-<h1>Side Missions</h1>
-{f"<div class='error'>{error}</div>" if error else ""}
-<formn
-  <input name="agent" placeholder="Nombre de agente secreto" autocomplete="username">
-  <button>Entrar</button>
-</form>
-/registerRegistrarse</a>
-""")
+        <h1>Side Missions</h1>
+        {f"<div class='error'>{error}</div>" if error else ""}
+        <form method="post" action="/login">
+            <input name="agent" placeholder="Nombre de agente secreto">
+            <button>Entrar</button>
+        </form>
+        <a class="link" href="/register">Registrarse</a>
+        """)
 
     def page_register(self):
         self.html("""
-<h2>Registro</h2>
-<form method<input name="name" placeholder="Tu nombre real" autocomplete="name">
-  <button>OK</button>
-</form>
-""")
+        <h2>Registro</h2>
+        <form method="post" action="/register">
+            <input name="name" placeholder="Tu nombre real">
+            <button>OK</button>
+        </form>
+        """)
 
     def page_assigned(self, agent):
         self.html(f"""
-<h2>Tu agente secreto es</h2>
-<div class="agent">{agent}</div>
-<a class=">
-""")
+        <h2>Tu agente secreto es</h2>
+        <div class="agent">{agent}</div>
+        <a class="link" href="/">Volver</a>
+        """)
 
+    
     def page_agent(self, state):
         agent = parse_qs(self.path.split("?")[1]).get("name", [""])[0].casefold()
         data = state["agents"].get(agent)
@@ -427,34 +446,33 @@ class Handler(BaseHTTPRequestHandler):
         cards = ""
         for i, m in enumerate(data["missions"]):
             cards += f"""
-<div class="card {m['status']}" onclick="toggle({i})">
-  {m['text']}
-</div>
-"""
+            <div class="card {m['status']}" onclick="toggle({i})">
+                {m['text']}
+            </div>
+            """
 
         self.html(f"""
-<h2>Agente {agent}</h2>
-<div class="cards">{cards}</div>
-<script>
-function toggle(i) {{
-  fetch("/toggle", {{
-    method:"POST",
-    headers:{{"Content-Type":"application/x-www-form-urlencoded"}},
-    body:"agent={agent}&idx="+i
-  }}).then(()=>location.reload())
-}}
-</script>
-""")
+        <h2>Agente {agent}</h2>
+        {cards}
+        <script>
+        function toggle(i){{
+            fetch("/toggle", {{
+                method:"POST",
+                headers:{{"Content-Type":"application/x-www-form-urlencoded"}},
+                body:"agent={agent}&idx="+i
+            }}).then(()=>location.reload())
+        }}
+        </script>
+        """)
 
     def page_admin(self, state):
         players = ""
         for player, agent in state["players"].items():
             players += f"""
-<div class="player" onclick="openModal('{player}','{agent}')">
-  <div class="player-name">{player}</div>
-  <div class="player-agent">{agent}</div>
-</div>
-"""
+            <div class="player" onclick="openModal('{player}','{agent}')">
+                {player}
+            </div>
+            """
 
         modals = ""
         for player, agent in state["players"].items():
@@ -462,252 +480,111 @@ function toggle(i) {{
             cards = ""
             for m in a["missions"]:
                 cards += f"<div class='card {m['status']}'>{m['text']}</div>"
+
             modals += f"""
-<div id="modal-{player}" class="modal">
-  <div class="modal-content">
-    <h3>{agent}</h3>
-    <p class="modal-player">{player}</p>
-    <div class="cards">{cards}</div>
-    <button class="close" onclick="closeModal('{player}')">Cerrar</button>
-  </div>
-</div>
-"""
+            <div id="modal-{player}" class="modal">
+                <div class="modal-content">
+                    <h3>{agent}</h3>
+                    <p>{player}</p>
+                    {cards}
+                    <button class="close" onclick="closeModal('{player}')">Cerrar</button>
+                </div>
+            </div>
+            """
 
         self.html(f"""
-<h2>Admin</h2>
-<div class="list">{players}</div>
-{modals}
-<formt<button>Nueva Partida</button></form>
-/end<button class="danger">Terminar partida</button></form>
-<script>
-function openModal(p){{document.getElementById("modal-"+p).style.display="flex"}}
-function closeModal(p){{document.getElementById("modal-"+p).style.display="none"}}
-</script>
-""")
+        <h2>Admin</h2>
+        <div class="list">{players}</div>
+        {modals}
+        <form method="post" action="/start"><button>Iniciar partida</button></form>
+        <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
+        <script>
+        function openModal(p){{document.getElementById("modal-"+p).style.display="flex"}}
+        function closeModal(p){{document.getElementById("modal-"+p).style.display="none"}}
+        </script>
+        """)
 
-    # -------------------------------
-    # HTML base (con soporte móvil)
-    # -------------------------------
+    # -------------------------
+    # HTML base
+    # -------------------------
+
     def html(self, body):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(f"""
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<!-- Adaptación móvil -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Side Missions</title>
-<style>
-  :root {{
-    /* Escala tipográfica cómoda en móvil y escritorio */
-    --fs-base: 16px;
-    --fs-title: clamp(22px, 4.8vw, 32px);
-    --fs-sub: clamp(18px, 4vw, 24px);
-    --fs-body: clamp(15px, 3.6vw, 18px);
-    --fs-button: clamp(16px, 4vw, 18px);
-
-    /* Espaciados responsivos */
-    --space-1: clamp(6px, 1.6vw, 10px);
-    --space-2: clamp(10px, 2.4vw, 16px);
-    --space-3: clamp(16px, 3.2vw, 24px);
-    --radius: 18px;
-
-    /* Layout */
-    --max-content: 720px;
-  }}
-
-  html, body {{
-    height: 100%;
-  }}
-
-  body {{
-    background:#0e0e11;
-    color:#fff;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    text-align:center;
-    margin:0;
-    padding:0;
-    -webkit-text-size-adjust: 100%; /* Evita zoom automático en iOS */
-  }}
-
-  .wrap {{
-    margin: 0 auto;
-    padding: var(--space-3);
-    max-width: var(--max-content);
-  }}
-
-  h1 {{
-    font-size: var(--fs-title);
-    margin: 0 0 var(--space-2);
-  }}
-
-  h2, h3 {{
-    font-size: var(--fs-sub);
-    margin: 0 0 var(--space-2);
-  }}
-
-  p, .modal-player {{
-    font-size: var(--fs-body);
-  }}
-
-  .form {{
-    display: grid;
-    gap: var(--space-2);
-    margin: var(--space-2) auto;
-    width: min(100%, 480px);
-  }}
-
-  input, button {{
-    padding: 14px;
-    border-radius: var(--radius);
-    border: none;
-    font-size: var(--fs-button); /* >=16px evita zoom en iOS */
-  }}
-
-  input {{
-    width: 100%;
-    box-sizing: border-box;
-  }}
-
-  button {{
-    background:#5865f2; color:white;
-    width: 100%;
-    cursor: pointer;
-  }}
-
-  .danger {{ background:#d33; }}
-
-  .link {{
-    color:#aaa;
-    display:block;
-    margin-top: var(--space-2);
-    font-size: var(--fs-body);
-  }}
-
-  .agent {{
-    font-size: clamp(28px, 6vw, 36px);
-    margin: var(--space-3) 0;
-    word-break: break-word;
-  }}
-
-  .cards {{
-    display: grid;
-    gap: var(--space-2);
-    grid-template-columns: 1fr;
-    width: min(100%, 520px);
-    margin: 0 auto var(--space-3);
-  }}
-
-  .card {{
-    background:#f2f2f2;
-    color:#111;
-    padding: clamp(16px, 3.6vw, 20px);
-    border-radius: 20px;
-    text-align: left;
-    line-height: 1.35;
-    box-shadow: 0 2px 6px rgba(0,0,0,.2);
-    user-select: none;
-  }}
-
-  .card:active {{
-    transform: scale(0.995);
-  }}
-
-  .completed {{ background:#2ecc71; }}
-  .failed {{ background:#e74c3c; }}
-
-  .list {{
-    max-height: 40vh;
-    overflow-y:auto;
-    margin: 0 auto var(--space-3);
-    width: min(100%, 560px);
-    padding: 0 var(--space-1);
-    box-sizing: border-box;
-  }}
-
-  .player {{
-    background:#1e1e2a;
-    padding: var(--space-2);
-    border-radius: 16px;
-    margin: var(--space-1) auto;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-  }}
-
-  .player-name {{
-    font-size: var(--fs-body);
-    font-weight: 600;
-  }}
-
-  .player-agent {{
-    font-size: var(--fs-body);
-    opacity: .8;
-  }}
-
-  .modal {{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.7);
-    display:none;
-    align-items:center;
-    justify-content:center;
-    padding: var(--space-2);
-  }}
-
-  .modal-content {{
-    background:#111;
-    padding: var(--space-3);
-    border-radius: 24px;
-    max-width: 520px;
-    width: 100%;
-    text-align: left;
-    box-sizing: border-box;
-  }}
-
-  .error {{
-    color:#f66;
-    margin-bottom: var(--space-1);
-    font-size: var(--fs-body);
-  }}
-
-  /* Mejora de hit-area en móvil */
-  @media (hover: none) and (pointer: coarse) {{
-    .card {{
-      padding: clamp(18px, 4.5vw, 24px);
-    }}
-    button {{
-      padding: clamp(16px, 4.5vw, 20px);
-    }}
-  }}
-
-  /* Layout en pantallas grandes: centrado y respiración */
-  @media (min-width: 768px) {{
-    .wrap {{ padding: 40px; }}
-    .cards {{ grid-template-columns: 1fr 1fr; }}
-  }}
-</style>
-</head>
-<body>
-  <div class="wrap">
-    {body}
-  </div>
-</body>
-</html>
-""".encode())
+        <html><head><style>
+        body {{
+            background:#0e0e11;
+            color:#fff;
+            font-family:system-ui;
+            text-align:center;
+            padding:24px;
+        }}
+        h1,h2,h3 {{ margin-bottom:16px; }}
+        input,button {{
+            padding:14px;
+            border-radius:18px;
+            border:none;
+            font-size:18px;
+            margin:8px;
+        }}
+        button {{ background:#5865f2; color:white; }}
+        .danger {{ background:#d33; }}
+        .link {{ color:#aaa; display:block; margin-top:20px; }}
+        .agent {{ font-size:36px; margin:24px; }}
+        .card {{
+            background:#f2f2f2;
+            color:#111;
+            padding:20px;
+            margin:12px auto;
+            border-radius:20px;
+            max-width:420px;
+        }}
+        .completed {{ background:#2ecc71; }}
+        .failed {{ background:#e74c3c; }}
+        .list {{
+            max-height:300px;
+            overflow-y:auto;
+        }}
+        .player {{
+            background:#1e1e2a;
+            padding:16px;
+            border-radius:16px;
+            margin:10px auto;
+            max-width:300px;
+            cursor:pointer;
+        }}
+        .modal {{
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,.7);
+            display:none;
+            align-items:center;
+            justify-content:center;
+        }}
+        .modal-content {{
+            background:#111;
+            padding:24px;
+            border-radius:24px;
+            max-width:480px;
+            width:90%;
+        }}
+        .error {{ color:#f66; margin-bottom:12px; }}
+        </style></head><body>{body}</body></html>
+        """.encode())
 
     def redirect(self, path):
         self.send_response(302)
         self.send_header("Location", path)
         self.end_headers()
 
-# -------------------------------
+
+# -------------------------
 # Server
-# -------------------------------
+# -------------------------
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
