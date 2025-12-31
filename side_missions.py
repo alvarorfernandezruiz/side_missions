@@ -496,7 +496,7 @@ class Handler(BaseHTTPRequestHandler):
         <h2>Admin</h2>
         <div class="list">{players}</div>
         {modals}
-        <form method="post" action="/start"><button>Iniciar partida</button></form>
+        <form method="post" action="/start"><button>Nueva Partida</button></form>
         <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
         <script>
         function openModal(p){{document.getElementById("modal-"+p).style.display="flex"}}
@@ -587,4 +587,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
 
