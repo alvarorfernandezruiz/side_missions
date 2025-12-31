@@ -351,18 +351,24 @@ class Handler(BaseHTTPRequestHandler):
         data = parse_qs(self.rfile.read(length).decode())
         state = load_state()
 
+        
         if self.path == "/login":
-            agent = data.get("agent", [""])[0].strip()
-
-            if agent == ADMIN_AGENT:
+            # Normalizar el agente
+            agent = data.get("agent", [""])[0].strip().casefold()
+        
+            # Comparación con admin, también case-insensitive
+            if agent == ADMIN_AGENT.casefold():
                 self.redirect("/admin")
                 return
-
+        
+            # Validación de existencia y partida activa
             if not state["active"] or agent not in state["agents"]:
                 self.redirect("/?error=Agente inválido")
                 return
-
+        
+            # Redirigir usando el nombre normalizado (coincide con las claves del estado)
             self.redirect(f"/agent?name={agent}")
+
 
         elif self.path == "/register":
             name = data.get("name", [""])[0].strip()
@@ -429,8 +435,9 @@ class Handler(BaseHTTPRequestHandler):
         <a class="link" href="/">Volver</a>
         """)
 
+    
     def page_agent(self, state):
-        agent = parse_qs(self.path.split("?")[1]).get("name", [""])[0]
+        agent = parse_qs(self.path.split("?")[1]).get("name", [""])[0].casefold()
         data = state["agents"].get(agent)
         if not data:
             self.redirect("/")
@@ -580,3 +587,4 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
