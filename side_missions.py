@@ -1,11 +1,10 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json, os, random
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from threading import Lock
 
 STATE_FILE = "game_state.json"
 LOCK = Lock()
-
 ADMIN_AGENT = "itadmin"
 
 AGENT_NAMES = [
@@ -275,11 +274,7 @@ MISSIONS = [
     "Haz que alguien diga 'puede ser'.",
 ]
 
-DEFAULT_STATE = {
-    "active": False,
-    "agents": {},
-    "players": {}
-}
+DEFAULT_STATE = {"active": False, "agents": {}, "players": {}}
 
 
 # -------------------------
@@ -292,7 +287,6 @@ def load_state():
     with open(STATE_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
 def save_state(state):
     with LOCK:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -300,27 +294,25 @@ def save_state(state):
 
 
 # -------------------------
-# Lógica de juego
+# Lógica
 # -------------------------
 
 def generate_agents():
-    agents = {}
-    for name in AGENT_NAMES:
-        agents[name] = {
+    return {
+        name: {
             "player": None,
             "missions": [
                 {"text": random.choice(MISSIONS), "status": "pending"}
                 for _ in range(5)
             ]
-        }
-    return agents
+        } for name in AGENT_NAMES
+    }
 
-
-def assign_agent(state, player_name):
+def assign_agent(state, player):
     for agent, data in state["agents"].items():
         if data["player"] is None:
-            data["player"] = player_name
-            state["players"][player_name] = agent
+            data["player"] = player
+            state["players"][player] = agent
             return agent
     return None
 
@@ -333,18 +325,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         state = load_state()
-        path = self.path.split("?")[0]
+        path, _, qs = self.path.partition("?")
+        params = parse_qs(qs)
 
         if path == "/":
-            self.page_home("")
-        elif path == "/error":
-            self.page_home("Error: agente inválido o no hay partida.")
+            self.page_home(params.get("error", [""])[0])
+
         elif path == "/register":
-            self.page_register()
+            if not state["active"]:
+                self.redirect("/?error=No hay partida iniciada")
+            else:
+                self.page_register()
+
         elif path == "/agent":
             self.page_agent(state)
+
         elif path == "/admin":
             self.page_admin(state)
+
         else:
             self.send_error(404)
 
@@ -361,15 +359,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if not state["active"] or agent not in state["agents"]:
-                self.redirect("/error")
+                self.redirect("/?error=Agente inválido")
                 return
 
             self.redirect(f"/agent?name={agent}")
 
         elif self.path == "/register":
             name = data.get("name", [""])[0].strip()
-            if not state["active"] or not name:
-                self.redirect("/error")
+            if not name:
+                self.redirect("/register")
                 return
 
             agent = assign_agent(state, name)
@@ -379,11 +377,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/toggle":
             agent = data["agent"][0]
             idx = int(data["idx"][0])
-
-            mission = state["agents"][agent]["missions"][idx]
-            mission["status"] = (
-                "completed" if mission["status"] == "pending"
-                else "failed" if mission["status"] == "completed"
+            m = state["agents"][agent]["missions"][idx]
+            m["status"] = (
+                "completed" if m["status"] == "pending"
+                else "failed" if m["status"] == "completed"
                 else "pending"
             )
             save_state(state)
@@ -407,18 +404,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_home(self, error):
         self.html(f"""
-        <h1>🕵️ Side Missions</h1>
-        {f"<p class='error'>{error}</p>" if error else ""}
+        <h1>Side Missions</h1>
+        {f"<div class='error'>{error}</div>" if error else ""}
         <form method="post" action="/login">
             <input name="agent" placeholder="Nombre de agente secreto">
             <button>Entrar</button>
         </form>
-        <a href="/register">Registrarse</a>
+        <a class="link" href="/register">Registrarse</a>
         """)
 
     def page_register(self):
         self.html("""
-        <h1>Registro</h1>
+        <h2>Registro</h2>
         <form method="post" action="/register">
             <input name="name" placeholder="Tu nombre real">
             <button>OK</button>
@@ -427,15 +424,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_assigned(self, agent):
         self.html(f"""
-        <h1>Tu agente secreto es</h1>
+        <h2>Tu agente secreto es</h2>
         <div class="agent">{agent}</div>
-        <a href="/">OK</a>
+        <a class="link" href="/">Volver</a>
         """)
 
     def page_agent(self, state):
         agent = parse_qs(self.path.split("?")[1]).get("name", [""])[0]
         data = state["agents"].get(agent)
-
         if not data:
             self.redirect("/")
             return
@@ -449,29 +445,57 @@ class Handler(BaseHTTPRequestHandler):
             """
 
         self.html(f"""
-        <h1>Agente {agent}</h1>
+        <h2>Agente {agent}</h2>
         {cards}
         <script>
-        function toggle(i) {{
+        function toggle(i){{
             fetch("/toggle", {{
-                method: "POST",
-                headers: {{"Content-Type":"application/x-www-form-urlencoded"}},
-                body: "agent={agent}&idx="+i
+                method:"POST",
+                headers:{{"Content-Type":"application/x-www-form-urlencoded"}},
+                body:"agent={agent}&idx="+i
             }}).then(()=>location.reload())
         }}
         </script>
         """)
 
     def page_admin(self, state):
-        body = "<h1>Admin</h1>"
-        if not state["active"]:
-            body += "<form method='post' action='/start'><button>Iniciar partida</button></form>"
-        else:
-            for a, d in state["agents"].items():
-                if d["player"]:
-                    body += f"<p><b>{a}</b> — {d['player']}</p>"
-            body += "<form method='post' action='/end'><button>Terminar partida</button></form>"
-        self.html(body)
+        players = ""
+        for player, agent in state["players"].items():
+            players += f"""
+            <div class="player" onclick="openModal('{player}','{agent}')">
+                {player}
+            </div>
+            """
+
+        modals = ""
+        for player, agent in state["players"].items():
+            a = state["agents"][agent]
+            cards = ""
+            for m in a["missions"]:
+                cards += f"<div class='card {m['status']}'>{m['text']}</div>"
+
+            modals += f"""
+            <div id="modal-{player}" class="modal">
+                <div class="modal-content">
+                    <h3>{agent}</h3>
+                    <p>{player}</p>
+                    {cards}
+                    <button class="close" onclick="closeModal('{player}')">Cerrar</button>
+                </div>
+            </div>
+            """
+
+        self.html(f"""
+        <h2>Admin</h2>
+        <div class="list">{players}</div>
+        {modals}
+        <form method="post" action="/start"><button>Iniciar partida</button></form>
+        <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
+        <script>
+        function openModal(p){{document.getElementById("modal-"+p).style.display="flex"}}
+        function closeModal(p){{document.getElementById("modal-"+p).style.display="none"}}
+        </script>
+        """)
 
     # -------------------------
     # HTML base
@@ -482,41 +506,65 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(f"""
-        <html>
-        <head>
-        <style>
+        <html><head><style>
         body {{
-            font-family: system-ui;
-            background:#111;
-            color:white;
+            background:#0e0e11;
+            color:#fff;
+            font-family:system-ui;
             text-align:center;
-            padding:30px;
+            padding:24px;
         }}
-        input, button {{
-            padding:12px;
-            border-radius:12px;
+        h1,h2,h3 {{ margin-bottom:16px; }}
+        input,button {{
+            padding:14px;
+            border-radius:18px;
             border:none;
+            font-size:18px;
             margin:8px;
-            font-size:16px;
         }}
-        button {{ background:#444; color:white; }}
-        a {{ color:#aaa; display:block; margin-top:20px; }}
-        .agent {{ font-size:32px; margin:20px; }}
+        button {{ background:#5865f2; color:white; }}
+        .danger {{ background:#d33; }}
+        .link {{ color:#aaa; display:block; margin-top:20px; }}
+        .agent {{ font-size:36px; margin:24px; }}
         .card {{
-            background:#eee;
+            background:#f2f2f2;
             color:#111;
             padding:20px;
             margin:12px auto;
-            border-radius:16px;
-            max-width:400px;
+            border-radius:20px;
+            max-width:420px;
         }}
         .completed {{ background:#2ecc71; }}
         .failed {{ background:#e74c3c; }}
-        .error {{ color:#e74c3c; }}
-        </style>
-        </head>
-        <body>{body}</body>
-        </html>
+        .list {{
+            max-height:300px;
+            overflow-y:auto;
+        }}
+        .player {{
+            background:#1e1e2a;
+            padding:16px;
+            border-radius:16px;
+            margin:10px auto;
+            max-width:300px;
+            cursor:pointer;
+        }}
+        .modal {{
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,.7);
+            display:none;
+            align-items:center;
+            justify-content:center;
+        }}
+        .modal-content {{
+            background:#111;
+            padding:24px;
+            border-radius:24px;
+            max-width:480px;
+            width:90%;
+        }}
+        .error {{ color:#f66; margin-bottom:12px; }}
+        </style></head><body>{body}</body></html>
         """.encode())
 
     def redirect(self, path):
