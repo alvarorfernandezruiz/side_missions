@@ -363,7 +363,7 @@ class Handler(BaseHTTPRequestHandler):
         
             # Validación de existencia y partida activa
             if not state["active"] or agent not in state["agents"]:
-                self.redirect("/?error=Agente inválido")
+                self.redirect("/?error=Agente incorrecto")
                 return
         
             # Redirigir usando el nombre normalizado (coincide con las claves del estado)
@@ -587,4 +587,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
 
