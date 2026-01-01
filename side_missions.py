@@ -274,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
             """
 
         self.html(f"""
-        <h2>Admin</h2>
+        <h2>Panel de administrador</h2>
         <div class="panel list">{players_html}</div>
         {modals}
         <div class="panel">
@@ -445,4 +445,5 @@ button {{
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
 
