@@ -186,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
     def page_register(self, error=""):
         self.html(f"""
         <h2>Registro de agentes</h2>
-        <p class="hint">Elige cómo te identificarás durante esta partida</p>
+        <p class="hint">Introduce tu nombre para que se te asigne tu agente secreto</p>
         {f"<div class='error'>{error}</div>" if error else ""}
         <div class="panel">
             <form method="post" action="/register">
@@ -445,5 +445,6 @@ button {{
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
 
 
