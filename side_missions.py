@@ -172,34 +172,41 @@ class Handler(BaseHTTPRequestHandler):
     def page_home(self, error):
         self.html(f"""
         <h1>SIDE MISSIONS</h1>
+        <p class="hint">Introduce tu nombre de agente para acceder a tus misiones secretas</p>
         {f"<div class='error'>{error}</div>" if error else ""}
         <div class="panel">
             <form method="post" action="/login">
                 <input name="agent" placeholder="Nombre de agente secreto">
                 <button>Entrar</button>
             </form>
-            <a class="link" href="/register">Registrarse</a>
+            <a class="link" href="/register">¿Aún no tienes agente? Regístrate</a>
         </div>
         """)
 
     def page_register(self, error=""):
         self.html(f"""
         <h2>Registro</h2>
+        <p class="hint">Elige cómo te identificarás durante esta partida</p>
         {f"<div class='error'>{error}</div>" if error else ""}
         <div class="panel">
             <form method="post" action="/register">
-                <input name="name" placeholder="Tu nombre real">
-                <button>OK</button>
+                <input name="name" placeholder="Introduce tu nombre">
+                <button>Continuar</button>
             </form>
         </div>
         """)
 
     def page_assigned(self, agent):
         self.html(f"""
-        <h2>Tu agente secreto es</h2>
+        <h2>Tu nombre de agente secreto es:</h2>
         <div class="panel">
-            <div class="agent">{agent}</div>
-            <a class="link" href="/">Volver</a>
+            <div class="agent big">{agent}</div>
+            <p class="hint">
+                Recuerda este nombre, ya que será el que uses para entrar a tu panel de misiones.
+            </p>
+            <form action="/" method="get">
+                <button class="success">OK</button>
+            </form>
         </div>
         """)
 
@@ -211,12 +218,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         cards = "".join(
-            f"<div class='card {m['status']}' onclick='toggle({i})'>{m['text']}</div>"
+            f"<div class='card mission {m['status']}' onclick='toggle({i})'>{m['text']}</div>"
             for i, m in enumerate(data["missions"])
         )
 
         self.html(f"""
         <h2>Agente {agent}</h2>
+        <p class="hint">Pulsa sobre una misión para marcar su progreso</p>
         <div class="panel">{cards}</div>
         <script>
         function toggle(i){{
@@ -251,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
         modals = ""
         for player, agent in state["players"].items():
             cards = "".join(
-                f"<div class='card {m['status']}'>{m['text']}</div>"
+                f"<div class='card mission {m['status']}'>{m['text']}</div>"
                 for m in state["agents"][agent]["missions"]
             )
             modals += f"""
@@ -277,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
             <div class="modal-content">
                 <h3>¿Terminar partida?</h3>
                 <form method="post" action="/end">
-                    <button style="background:#2ecc71">OK</button>
+                    <button class="success">OK</button>
                 </form>
                 <button class="danger" onclick="closeEnd()">Cancelar</button>
             </div>
@@ -315,9 +323,15 @@ body {{
     margin:0;
     color:#033;
 }}
-h1 {{ font-size:48px; letter-spacing:4px; color:#045; }}
+h1 {{
+    font-size:48px;
+    letter-spacing:4px;
+    color:#045;
+    margin-bottom:8px;
+}}
+h2 {{ margin-bottom:8px; }}
 .panel {{
-    background:rgba(255,255,255,0.85);
+    background:rgba(255,255,255,0.9);
     border-radius:32px;
     padding:24px;
     margin:20px auto;
@@ -333,18 +347,36 @@ input, button {{
     margin:10px auto;
     font-size:18px;
 }}
-button {{ background:#1b8cff; color:white; font-weight:600; }}
+button {{
+    background:#1b8cff;
+    color:white;
+    font-weight:600;
+}}
+.success {{ background:#2ecc71; }}
 .danger {{ background:#e74c3c; }}
-.card {{ background:white; border-radius:20px; padding:16px; margin:10px 0; }}
+
+.card {{
+    background:white;
+    border-radius:22px;
+    padding:18px;
+    margin:14px 0;
+    box-shadow:
+        0 4px 8px rgba(0,0,0,0.08),
+        0 12px 20px rgba(0,0,0,0.06);
+}}
+
 .completed {{ background:#b9f3d0; }}
 .failed {{ background:#f7b4b4; }}
+
 .player {{
     background:#e9f7ff;
     padding:14px;
     border-radius:20px;
     margin:10px 0;
     cursor:pointer;
+    box-shadow:0 6px 14px rgba(0,0,0,0.08);
 }}
+
 .modal {{
     position:fixed;
     inset:0;
@@ -354,6 +386,7 @@ button {{ background:#1b8cff; color:white; font-weight:600; }}
     justify-content:center;
     z-index:1000;
 }}
+
 .modal-content {{
     background:white;
     border-radius:32px;
@@ -363,7 +396,33 @@ button {{ background:#1b8cff; color:white; font-weight:600; }}
     max-height:80vh;
     overflow-y:auto;
 }}
-.empty {{ color:#555; font-style:italic; }}
+
+.agent {{
+    font-size:36px;
+    margin:16px 0;
+}}
+
+.agent.big {{
+    font-size:48px;
+    font-weight:700;
+}}
+
+.subtitle {{
+    opacity:0.7;
+    margin-bottom:16px;
+}}
+
+.hint {{
+    font-size:14px;
+    opacity:0.75;
+    margin-bottom:12px;
+}}
+
+.empty {{
+    color:#555;
+    font-style:italic;
+}}
+
 .error {{ color:#c00; }}
 .link {{ color:#045; }}
 </style>
