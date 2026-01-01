@@ -207,18 +207,49 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_admin(self, state):
         players = ""
+        modals = ""
+
         for player, agent in state["players"].items():
-            players += f"<div class='player'>{player} → {agent}</div>"
+            players += f"""
+            <div class="player" onclick="openModal('{player}')">
+                {player}
+            </div>
+            """
+
+            cards = ""
+            for m in state["agents"][agent]["missions"]:
+                cards += f"<div class='card {m['status']}'>{m['text']}</div>"
+
+            modals += f"""
+            <div id="modal-{player}" class="modal">
+                <div class="modal-content">
+                    <h3>{agent}</h3>
+                    <p class="subtitle">{player}</p>
+                    <div class="modal-cards">{cards}</div>
+                    <button class="danger" onclick="closeModal('{player}')">Cerrar</button>
+                </div>
+            </div>
+            """
 
         self.html(f"""
         <h2>Admin</h2>
         <div class="list">{players}</div>
+        {modals}
         <form method="post" action="/start"><button>Nueva Partida</button></form>
         <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
+
+        <script>
+        function openModal(p){{
+            document.getElementById("modal-"+p).style.display="flex";
+        }}
+        function closeModal(p){{
+            document.getElementById("modal-"+p).style.display="none";
+        }}
+        </script>
         """)
 
     # -------------------------
-    # HTML base (RESPONSIVE)
+    # HTML base (RESPONSIVE + FIX)
     # -------------------------
 
     def html(self, body):
@@ -233,6 +264,10 @@ class Handler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Side Missions</title>
 <style>
+* {{
+    box-sizing: border-box;
+}}
+
 body {{
     background:#0e0e11;
     color:#fff;
@@ -248,7 +283,7 @@ h2 {{ font-size:clamp(22px, 5vw, 32px); }}
 input, button {{
     width:100%;
     max-width:420px;
-    padding:16px;
+    padding:14px 16px;
     border-radius:18px;
     border:none;
     font-size:18px;
@@ -282,7 +317,6 @@ button {{
     border-radius:20px;
     max-width:480px;
     width:100%;
-    box-sizing:border-box;
 }}
 
 .completed {{ background:#2ecc71; }}
@@ -294,6 +328,36 @@ button {{
     border-radius:16px;
     margin:10px auto;
     max-width:420px;
+    cursor:pointer;
+}}
+
+.list {{
+    max-height:60vh;
+    overflow-y:auto;
+}}
+
+.modal {{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.75);
+    display:none;
+    align-items:center;
+    justify-content:center;
+}}
+
+.modal-content {{
+    background:#111;
+    padding:24px;
+    border-radius:24px;
+    width:90%;
+    max-width:500px;
+    max-height:80vh;
+    overflow-y:auto;
+}}
+
+.subtitle {{
+    color:#aaa;
+    margin-bottom:16px;
 }}
 
 .error {{
