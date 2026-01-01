@@ -8,11 +8,11 @@ LOCK = Lock()
 ADMIN_AGENT = "itadmin"
 
 AGENT_NAMES = [
-    "bola","ocho","tigre","peine","gato","perro","mesa","silla","libro","calle",
-    "parque","vaso","plato","techo","suelo","cable","foco","nube","lluvia","cubo",
-    "coche","moto","barco","vapor","planta","piedra","cuadro","puerta","mapa","clave",
-    "notas","perfil","torre","reloj","metal","papel","cinta","radio","farol","cesto",
-    "casco","guante","caja","filtro","motor","banco","campo","sello","traje","plomo",
+    "Bola","Ocho","Tigre","Peine","Gato","Perro","Mesa","Silla","Libro","Calle",
+    "Parque","Vaso","Plato","Techo","Suelo","Cable","Foco","Nube","Lluvia","Cubo",
+    "Coche","Moto","Barco","Vapor","Planta","Piedra","Cuadro","Puerta","Mapa","Clave",
+    "Notas","Perfil","Torre","Reloj","Metal","Papel","Cinta","Radio","Farol","Cesto",
+    "Casco","Guante","Caja","Filtro","Motor","Banco","Campo","Sello","Traje","Plomo",
 ]
 
 MISSIONS = [
@@ -103,14 +103,23 @@ class Handler(BaseHTTPRequestHandler):
         state = load_state()
 
         if self.path == "/login":
-            agent = data.get("agent", [""])[0].strip().casefold()
-            if agent == ADMIN_AGENT:
+            agent_input = data.get("agent", [""])[0].strip()
+            agent_key = agent_input.casefold()
+
+            if agent_key == ADMIN_AGENT:
                 self.redirect("/admin")
                 return
-            if not state["active"] or agent not in state["agents"]:
+
+            agent_match = next(
+                (a for a in state["agents"] if a.casefold() == agent_key),
+                None
+            )
+
+            if not state["active"] or not agent_match:
                 self.redirect("/?error=Agente incorrecto")
                 return
-            self.redirect(f"/agent?name={agent}")
+
+            self.redirect(f"/agent?name={agent_match}")
 
         elif self.path == "/register":
             name = data.get("name", [""])[0].strip()
@@ -151,29 +160,35 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_home(self, error):
         self.html(f"""
-        <h1>Side Missions</h1>
+        <h1>SIDE MISSIONS</h1>
         {f"<div class='error'>{error}</div>" if error else ""}
-        <form method="post" action="/login">
-            <input name="agent" placeholder="Nombre de agente">
-            <button>Entrar</button>
-        </form>
-        <a class="link" href="/register">Registrarse</a>
+        <div class="panel">
+            <form method="post" action="/login">
+                <input name="agent" placeholder="Nombre de agente secreto">
+                <button>Entrar</button>
+            </form>
+            <a class="link" href="/register">Registrarse</a>
+        </div>
         """)
 
     def page_register(self):
         self.html("""
         <h2>Registro</h2>
-        <form method="post" action="/register">
-            <input name="name" placeholder="Tu nombre real">
-            <button>OK</button>
-        </form>
+        <div class="panel">
+            <form method="post" action="/register">
+                <input name="name" placeholder="Tu nombre real">
+                <button>OK</button>
+            </form>
+        </div>
         """)
 
     def page_assigned(self, agent):
         self.html(f"""
         <h2>Tu agente secreto es</h2>
-        <div class="agent">{agent}</div>
-        <a class="link" href="/">Volver</a>
+        <div class="panel">
+            <div class="agent">{agent}</div>
+            <a class="link" href="/">Volver</a>
+        </div>
         """)
 
     def page_agent(self, state):
@@ -193,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self.html(f"""
         <h2>Agente {agent}</h2>
-        {cards}
+        <div class="panel">{cards}</div>
         <script>
         function toggle(i){{
             fetch("/toggle", {{
@@ -225,7 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                 <div class="modal-content">
                     <h3>{agent}</h3>
                     <p class="subtitle">{player}</p>
-                    <div class="modal-cards">{cards}</div>
+                    {cards}
                     <button class="danger" onclick="closeModal('{player}')">Cerrar</button>
                 </div>
             </div>
@@ -233,23 +248,20 @@ class Handler(BaseHTTPRequestHandler):
 
         self.html(f"""
         <h2>Admin</h2>
-        <div class="list">{players}</div>
+        <div class="panel list">{players}</div>
         {modals}
-        <form method="post" action="/start"><button>Nueva Partida</button></form>
-        <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
-
+        <div class="panel">
+            <form method="post" action="/start"><button>Nueva Partida</button></form>
+            <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
+        </div>
         <script>
-        function openModal(p){{
-            document.getElementById("modal-"+p).style.display="flex";
-        }}
-        function closeModal(p){{
-            document.getElementById("modal-"+p).style.display="none";
-        }}
+        function openModal(p){{document.getElementById("modal-"+p).style.display="flex";}}
+        function closeModal(p){{document.getElementById("modal-"+p).style.display="none";}}
         </script>
         """)
 
     # -------------------------
-    # HTML base (RESPONSIVE + FIX)
+    # HTML base (NUEVO ESTILO)
     # -------------------------
 
     def html(self, body):
@@ -264,27 +276,44 @@ class Handler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Side Missions</title>
 <style>
-* {{
-    box-sizing: border-box;
-}}
+* {{ box-sizing: border-box; }}
 
 body {{
-    background:#0e0e11;
-    color:#fff;
-    font-family:system-ui, sans-serif;
-    text-align:center;
-    padding:16px;
     margin:0;
+    font-family:system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:linear-gradient(180deg, #9adcf7, #cfefff);
+    color:#033;
+    text-align:center;
+    padding:20px;
 }}
 
-h1 {{ font-size:clamp(28px, 6vw, 40px); }}
-h2 {{ font-size:clamp(22px, 5vw, 32px); }}
+h1 {{
+    font-size:clamp(32px, 7vw, 52px);
+    letter-spacing:4px;
+    color:#045;
+    margin-bottom:24px;
+}}
+
+h2 {{
+    font-size:clamp(22px, 5vw, 32px);
+    color:#045;
+}}
+
+.panel {{
+    background:rgba(255,255,255,0.75);
+    backdrop-filter: blur(8px);
+    border-radius:32px;
+    padding:24px;
+    margin:20px auto;
+    max-width:500px;
+    box-shadow:0 20px 40px rgba(0,0,0,0.1);
+}}
 
 input, button {{
     width:100%;
     max-width:420px;
     padding:14px 16px;
-    border-radius:18px;
+    border-radius:24px;
     border:none;
     font-size:18px;
     margin:10px auto;
@@ -292,78 +321,65 @@ input, button {{
 }}
 
 button {{
-    background:#5865f2;
+    background:#1b8cff;
     color:white;
+    font-weight:600;
 }}
 
-.danger {{ background:#d33; }}
+.danger {{ background:#e74c3c; }}
 
 .link {{
-    color:#aaa;
+    color:#045;
     display:block;
-    margin-top:20px;
+    margin-top:16px;
 }}
 
 .agent {{
-    font-size:clamp(32px, 8vw, 48px);
-    margin:24px;
+    font-size:42px;
+    font-weight:700;
+    color:#1b8cff;
 }}
 
 .card {{
-    background:#f2f2f2;
-    color:#111;
-    padding:20px;
-    margin:12px auto;
-    border-radius:20px;
-    max-width:480px;
-    width:100%;
+    background:white;
+    border-radius:24px;
+    padding:18px;
+    margin:12px 0;
+    box-shadow:0 10px 20px rgba(0,0,0,0.08);
 }}
 
-.completed {{ background:#2ecc71; }}
-.failed {{ background:#e74c3c; }}
+.completed {{ background:#b9f3d0; }}
+.failed {{ background:#f7b4b4; }}
 
 .player {{
-    background:#1e1e2a;
+    background:#e9f7ff;
     padding:16px;
-    border-radius:16px;
+    border-radius:20px;
     margin:10px auto;
-    max-width:420px;
     cursor:pointer;
-}}
-
-.list {{
-    max-height:60vh;
-    overflow-y:auto;
 }}
 
 .modal {{
     position:fixed;
     inset:0;
-    background:rgba(0,0,0,.75);
+    background:rgba(0,0,0,0.4);
     display:none;
     align-items:center;
     justify-content:center;
 }}
 
 .modal-content {{
-    background:#111;
+    background:white;
     padding:24px;
-    border-radius:24px;
+    border-radius:32px;
+    max-width:520px;
     width:90%;
-    max-width:500px;
     max-height:80vh;
     overflow-y:auto;
 }}
 
-.subtitle {{
-    color:#aaa;
-    margin-bottom:16px;
-}}
-
-.error {{
-    color:#f66;
-    margin-bottom:12px;
-}}
+.subtitle {{ color:#666; margin-bottom:12px; }}
+.error {{ color:#c00; }}
 </style>
 </head>
 <body>
