@@ -50,6 +50,8 @@ def save_state(state):
 # -------------------------
 
 def generate_agents():
+    names = AGENT_NAMES[:]
+    random.shuffle(names)
     return {
         name: {
             "player": None,
@@ -57,16 +59,17 @@ def generate_agents():
                 {"text": random.choice(MISSIONS), "status": "pending"}
                 for _ in range(5)
             ]
-        } for name in AGENT_NAMES
+        } for name in names
     }
 
 def assign_agent(state, player):
-    for agent, data in state["agents"].items():
-        if data["player"] is None:
-            data["player"] = player
-            state["players"][player] = agent
-            return agent
-    return None
+    free_agents = [a for a, d in state["agents"].items() if d["player"] is None]
+    if not free_agents:
+        return None
+    agent = random.choice(free_agents)
+    state["agents"][agent]["player"] = player
+    state["players"][player] = agent
+    return agent
 
 # -------------------------
 # HTTP Handler
@@ -86,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
             if not state["active"]:
                 self.redirect("/?error=No hay partida iniciada")
             else:
-                self.page_register()
+                self.page_register(params.get("error", [""])[0])
 
         elif path == "/agent":
             self.page_agent(state)
@@ -104,14 +107,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/login":
             agent_input = data.get("agent", [""])[0].strip()
-            agent_key = agent_input.casefold()
+            key = agent_input.casefold()
 
-            if agent_key == ADMIN_AGENT:
+            if key == ADMIN_AGENT:
                 self.redirect("/admin")
                 return
 
             agent_match = next(
-                (a for a in state["agents"] if a.casefold() == agent_key),
+                (a for a in state["agents"] if a.casefold() == key),
                 None
             )
 
@@ -126,6 +129,11 @@ class Handler(BaseHTTPRequestHandler):
             if not name:
                 self.redirect("/register")
                 return
+
+            if any(p.casefold() == name.casefold() for p in state["players"]):
+                self.redirect("/register?error=Ya hay un agente con este nombre en la partida")
+                return
+
             agent = assign_agent(state, name)
             save_state(state)
             self.page_assigned(agent)
@@ -171,9 +179,10 @@ class Handler(BaseHTTPRequestHandler):
         </div>
         """)
 
-    def page_register(self):
-        self.html("""
+    def page_register(self, error=""):
+        self.html(f"""
         <h2>Registro</h2>
+        {f"<div class='error'>{error}</div>" if error else ""}
         <div class="panel">
             <form method="post" action="/register">
                 <input name="name" placeholder="Tu nombre real">
@@ -198,13 +207,10 @@ class Handler(BaseHTTPRequestHandler):
             self.redirect("/")
             return
 
-        cards = ""
-        for i, m in enumerate(data["missions"]):
-            cards += f"""
-            <div class="card {m['status']}" onclick="toggle({i})">
-                {m['text']}
-            </div>
-            """
+        cards = "".join(
+            f"<div class='card {m['status']}' onclick='toggle({i})'>{m['text']}</div>"
+            for i, m in enumerate(data["missions"])
+        )
 
         self.html(f"""
         <h2>Agente {agent}</h2>
@@ -225,15 +231,12 @@ class Handler(BaseHTTPRequestHandler):
         modals = ""
 
         for player, agent in state["players"].items():
-            players += f"""
-            <div class="player" onclick="openModal('{player}')">
-                {player}
-            </div>
-            """
+            players += f"<div class='player' onclick=\"openModal('{player}')\">{player}</div>"
 
-            cards = ""
-            for m in state["agents"][agent]["missions"]:
-                cards += f"<div class='card {m['status']}'>{m['text']}</div>"
+            cards = "".join(
+                f"<div class='card {m['status']}'>{m['text']}</div>"
+                for m in state["agents"][agent]["missions"]
+            )
 
             modals += f"""
             <div id="modal-{player}" class="modal">
@@ -261,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
         """)
 
     # -------------------------
-    # HTML base (NUEVO ESTILO)
+    # HTML base
     # -------------------------
 
     def html(self, body):
@@ -274,78 +277,51 @@ class Handler(BaseHTTPRequestHandler):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Side Missions</title>
 <style>
-* {{ box-sizing: border-box; }}
+* {{ box-sizing:border-box; }}
 
 body {{
-    margin:0;
-    font-family:system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background:linear-gradient(180deg, #9adcf7, #cfefff);
-    color:#033;
+    background:#bfe9ff;
+    font-family:system-ui, sans-serif;
     text-align:center;
     padding:20px;
+    margin:0;
+    color:#033;
 }}
 
 h1 {{
-    font-size:clamp(32px, 7vw, 52px);
+    font-size:48px;
     letter-spacing:4px;
-    color:#045;
-    margin-bottom:24px;
-}}
-
-h2 {{
-    font-size:clamp(22px, 5vw, 32px);
     color:#045;
 }}
 
 .panel {{
-    background:rgba(255,255,255,0.75);
-    backdrop-filter: blur(8px);
+    background:rgba(255,255,255,0.8);
     border-radius:32px;
     padding:24px;
     margin:20px auto;
-    max-width:500px;
-    box-shadow:0 20px 40px rgba(0,0,0,0.1);
+    max-width:520px;
+    box-shadow:0 20px 40px rgba(0,0,0,0.12);
 }}
 
 input, button {{
     width:100%;
     max-width:420px;
-    padding:14px 16px;
+    padding:14px;
     border-radius:24px;
     border:none;
-    font-size:18px;
     margin:10px auto;
-    display:block;
+    font-size:18px;
 }}
 
-button {{
-    background:#1b8cff;
-    color:white;
-    font-weight:600;
-}}
-
+button {{ background:#1b8cff; color:white; font-weight:600; }}
 .danger {{ background:#e74c3c; }}
-
-.link {{
-    color:#045;
-    display:block;
-    margin-top:16px;
-}}
-
-.agent {{
-    font-size:42px;
-    font-weight:700;
-    color:#1b8cff;
-}}
 
 .card {{
     background:white;
-    border-radius:24px;
-    padding:18px;
-    margin:12px 0;
-    box-shadow:0 10px 20px rgba(0,0,0,0.08);
+    border-radius:20px;
+    padding:16px;
+    margin:10px 0;
 }}
 
 .completed {{ background:#b9f3d0; }}
@@ -353,9 +329,9 @@ button {{
 
 .player {{
     background:#e9f7ff;
-    padding:16px;
+    padding:14px;
     border-radius:20px;
-    margin:10px auto;
+    margin:10px 0;
     cursor:pointer;
 }}
 
@@ -366,20 +342,21 @@ button {{
     display:none;
     align-items:center;
     justify-content:center;
+    z-index:1000;
 }}
 
 .modal-content {{
     background:white;
-    padding:24px;
     border-radius:32px;
+    padding:24px;
     max-width:520px;
     width:90%;
     max-height:80vh;
     overflow-y:auto;
 }}
 
-.subtitle {{ color:#666; margin-bottom:12px; }}
 .error {{ color:#c00; }}
+.link {{ color:#045; }}
 </style>
 </head>
 <body>
