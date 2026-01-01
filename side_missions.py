@@ -95,7 +95,10 @@ class Handler(BaseHTTPRequestHandler):
             self.page_agent(state)
 
         elif path == "/admin":
-            self.page_admin(state)
+            if not state["active"]:
+                self.page_admin_start()
+            else:
+                self.page_admin(state)
 
         else:
             self.send_error(404)
@@ -160,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/end":
             save_state(DEFAULT_STATE.copy())
-            self.redirect("/")
+            self.redirect("/admin")
 
     # -------------------------
     # Páginas
@@ -226,18 +229,31 @@ class Handler(BaseHTTPRequestHandler):
         </script>
         """)
 
+    def page_admin_start(self):
+        self.html("""
+        <h2>Admin</h2>
+        <div class="panel">
+            <form method="post" action="/start">
+                <button>Nueva Partida</button>
+            </form>
+        </div>
+        """)
+
     def page_admin(self, state):
-        players = ""
+        if not state["players"]:
+            players_html = "<p class='empty'>Todavía no hay jugadores registrados</p>"
+        else:
+            players_html = "".join(
+                f"<div class='player' onclick=\"openModal('{p}')\">{p}</div>"
+                for p in state["players"]
+            )
+
         modals = ""
-
         for player, agent in state["players"].items():
-            players += f"<div class='player' onclick=\"openModal('{player}')\">{player}</div>"
-
             cards = "".join(
                 f"<div class='card {m['status']}'>{m['text']}</div>"
                 for m in state["agents"][agent]["missions"]
             )
-
             modals += f"""
             <div id="modal-{player}" class="modal">
                 <div class="modal-content">
@@ -251,15 +267,27 @@ class Handler(BaseHTTPRequestHandler):
 
         self.html(f"""
         <h2>Admin</h2>
-        <div class="panel list">{players}</div>
+        <div class="panel list">{players_html}</div>
         {modals}
         <div class="panel">
-            <form method="post" action="/start"><button>Nueva Partida</button></form>
-            <form method="post" action="/end"><button class="danger">Terminar partida</button></form>
+            <button class="danger" onclick="openEnd()">Terminar Partida</button>
         </div>
+
+        <div id="end-modal" class="modal">
+            <div class="modal-content">
+                <h3>¿Terminar partida?</h3>
+                <form method="post" action="/end">
+                    <button style="background:#2ecc71">OK</button>
+                </form>
+                <button class="danger" onclick="closeEnd()">Cancelar</button>
+            </div>
+        </div>
+
         <script>
         function openModal(p){{document.getElementById("modal-"+p).style.display="flex";}}
         function closeModal(p){{document.getElementById("modal-"+p).style.display="none";}}
+        function openEnd(){{document.getElementById("end-modal").style.display="flex";}}
+        function closeEnd(){{document.getElementById("end-modal").style.display="none";}}
         </script>
         """)
 
@@ -279,7 +307,6 @@ class Handler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 * {{ box-sizing:border-box; }}
-
 body {{
     background:#bfe9ff;
     font-family:system-ui, sans-serif;
@@ -288,22 +315,15 @@ body {{
     margin:0;
     color:#033;
 }}
-
-h1 {{
-    font-size:48px;
-    letter-spacing:4px;
-    color:#045;
-}}
-
+h1 {{ font-size:48px; letter-spacing:4px; color:#045; }}
 .panel {{
-    background:rgba(255,255,255,0.8);
+    background:rgba(255,255,255,0.85);
     border-radius:32px;
     padding:24px;
     margin:20px auto;
     max-width:520px;
     box-shadow:0 20px 40px rgba(0,0,0,0.12);
 }}
-
 input, button {{
     width:100%;
     max-width:420px;
@@ -313,20 +333,11 @@ input, button {{
     margin:10px auto;
     font-size:18px;
 }}
-
 button {{ background:#1b8cff; color:white; font-weight:600; }}
 .danger {{ background:#e74c3c; }}
-
-.card {{
-    background:white;
-    border-radius:20px;
-    padding:16px;
-    margin:10px 0;
-}}
-
+.card {{ background:white; border-radius:20px; padding:16px; margin:10px 0; }}
 .completed {{ background:#b9f3d0; }}
 .failed {{ background:#f7b4b4; }}
-
 .player {{
     background:#e9f7ff;
     padding:14px;
@@ -334,7 +345,6 @@ button {{ background:#1b8cff; color:white; font-weight:600; }}
     margin:10px 0;
     cursor:pointer;
 }}
-
 .modal {{
     position:fixed;
     inset:0;
@@ -344,7 +354,6 @@ button {{ background:#1b8cff; color:white; font-weight:600; }}
     justify-content:center;
     z-index:1000;
 }}
-
 .modal-content {{
     background:white;
     border-radius:32px;
@@ -354,7 +363,7 @@ button {{ background:#1b8cff; color:white; font-weight:600; }}
     max-height:80vh;
     overflow-y:auto;
 }}
-
+.empty {{ color:#555; font-style:italic; }}
 .error {{ color:#c00; }}
 .link {{ color:#045; }}
 </style>
