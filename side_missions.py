@@ -16,8 +16,16 @@ AGENT_NAMES = [
 ]
 
 MISSIONS = [
-    # (misma lista completa de misiones que ya tienes)
-    # NO se acorta en ejecución real, aquí se asume completa
+    "Consigue que alguien diga la palabra 'vale'.",
+    "Haz que alguien diga 'mañana'.",
+    "Logra que alguien diga 'si' sin que se lo pidas directamente.",
+    "Consigue que alguien diga 'no' en respuesta a algo tuyo.",
+    "Haz que alguien mencione 'Madrid'.",
+    "Consigue que alguien diga 'secreto'.",
+    "Haz que alguien diga 'azul'.",
+    "Haz que alguien diga 'verde'.",
+    "Consigue que alguien diga 'codigo'.",
+    "Haz que alguien diga 'idea'.",
 ]
 
 DEFAULT_STATE = {"active": False, "agents": {}, "players": {}}
@@ -38,53 +46,6 @@ def save_state(state):
             json.dump(state, f, ensure_ascii=False, indent=2)
 
 # -------------------------
-# Clasificación de misiones
-# -------------------------
-
-def mission_type(index):
-    if index < 40:
-        return "palabras"
-    elif index < 80:
-        return "objetos"
-    elif index < 120:
-        return "acciones"
-    elif index < 160:
-        return "mirar"
-    elif index < 200:
-        return "interaccion"
-    elif index < 230:
-        return "retos"
-    else:
-        return "misc"
-
-def generate_missions():
-    selected = []
-    used_texts = set()
-    type_count = {}
-
-    attempts = 0
-    while len(selected) < 5 and attempts < 1000:
-        attempts += 1
-        idx = random.randrange(len(MISSIONS))
-        text = MISSIONS[idx]
-        m_type = mission_type(idx)
-
-        if text in used_texts:
-            continue
-
-        if type_count.get(m_type, 0) >= 2:
-            continue
-
-        selected.append({
-            "text": text,
-            "status": "pending"
-        })
-        used_texts.add(text)
-        type_count[m_type] = type_count.get(m_type, 0) + 1
-
-    return selected
-
-# -------------------------
 # Lógica
 # -------------------------
 
@@ -94,7 +55,10 @@ def generate_agents():
     return {
         name: {
             "player": None,
-            "missions": generate_missions()
+            "missions": [
+                {"text": random.choice(MISSIONS), "status": "pending"}
+                for _ in range(5)
+            ]
         } for name in names
     }
 
@@ -221,8 +185,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_register(self, error=""):
         self.html(f"""
-        <h2>Registro</h2>
-        <p class="hint">Introduce tu nombre para recibir un agente secreto aleatorio</p>
+        <h2>Registro de agentes</h2>
+        <p class="hint">Introduce tu nombre para que se te asigne tu agente secreto</p>
         {f"<div class='error'>{error}</div>" if error else ""}
         <div class="panel">
             <form method="post" action="/register">
@@ -275,7 +239,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def page_admin_start(self):
         self.html("""
-        <h2>Admin</h2>
+        <h2>Panel de administrador</h2>
         <div class="panel">
             <form method="post" action="/start">
                 <button>Nueva Partida</button>
@@ -310,12 +274,10 @@ class Handler(BaseHTTPRequestHandler):
             """
 
         self.html(f"""
-        <h2>Admin</h2>
+        <h2>Panel de administrador</h2>
         <div class="panel list">{players_html}</div>
         {modals}
-
         <div class="panel">
-            <a class="link" href="/">← Volver a página de acceso</a>
             <button class="danger" onclick="openEnd()">Terminar Partida</button>
         </div>
 
@@ -365,7 +327,9 @@ h1 {{
     font-size:48px;
     letter-spacing:4px;
     color:#045;
+    margin-bottom:8px;
 }}
+h2 {{ margin-bottom:8px; }}
 .panel {{
     background:rgba(255,255,255,0.9);
     border-radius:32px;
@@ -397,8 +361,8 @@ button {{
     padding:18px;
     margin:14px 0;
     box-shadow:
-        0 6px 12px rgba(0,0,0,0.10),
-        0 16px 28px rgba(0,0,0,0.08);
+        0 4px 8px rgba(0,0,0,0.08),
+        0 12px 20px rgba(0,0,0,0.06);
 }}
 
 .completed {{ background:#b9f3d0; }}
@@ -433,16 +397,34 @@ button {{
     overflow-y:auto;
 }}
 
+.agent {{
+    font-size:36px;
+    margin:16px 0;
+}}
+
 .agent.big {{
     font-size:48px;
     font-weight:700;
 }}
 
-.subtitle {{ opacity:0.7; }}
-.hint {{ font-size:14px; opacity:0.75; }}
-.empty {{ font-style:italic; opacity:0.7; }}
+.subtitle {{
+    opacity:0.7;
+    margin-bottom:16px;
+}}
+
+.hint {{
+    font-size:14px;
+    opacity:0.75;
+    margin-bottom:12px;
+}}
+
+.empty {{
+    color:#555;
+    font-style:italic;
+}}
+
 .error {{ color:#c00; }}
-.link {{ color:#045; display:block; margin-bottom:10px; }}
+.link {{ color:#045; }}
 </style>
 </head>
 <body>
@@ -463,3 +445,5 @@ button {{
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
+
+
