@@ -56,8 +56,8 @@ def generate_agents():
         name: {
             "player": None,
             "missions": [
-                {"text": random.choice(MISSIONS), "status": "pending"}
-                for _ in range(5)
+                {"text": m, "status": "pending"}
+                for m in random.sample(MISSIONS, 5)  # ← AQUÍ ESTÁ LA REGLA
             ]
         } for name in names
     }
@@ -445,5 +445,3 @@ button {{
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     HTTPServer(("", port), Handler).serve_forever()
-
-
